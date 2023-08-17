@@ -90,8 +90,9 @@ impl StateMachine {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.state = RwLock::new(self.initial_state.clone());
+    pub fn reset(&self) {
+        let mut state = self.state.write().expect("failed to get lock");
+        *state = self.initial_state.clone();
     }
 
     pub fn current_state(&self) -> State {
