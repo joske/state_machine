@@ -1,0 +1,3 @@
+# StateMachine
+
+Simple FSM implementation
