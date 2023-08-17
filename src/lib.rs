@@ -61,7 +61,8 @@ pub struct StateMachine {
 }
 
 impl StateMachine {
-    pub fn new(initial_state: State, states: Vec<State>) -> Self {
+    #[must_use]
+    pub fn new(initial_state: &State, states: Vec<State>) -> Self {
         Self {
             state: RwLock::new(initial_state.clone()),
             initial_state: initial_state.clone(),
@@ -69,14 +70,14 @@ impl StateMachine {
         }
     }
 
-    pub fn event(&self, event: Event) -> Result<()> {
+    pub fn event(&self, event: &Event) -> Result<()> {
         debug!("handling event: {:?}", event);
         let mut state = self
             .state
             .write()
             .map_err(|_| anyhow::anyhow!("lock error"))?;
         debug!("state: {:?}", state);
-        let transition = state.events.get(&event).cloned();
+        let transition = state.events.get(event).cloned();
         if let Some(transition) = transition {
             *state = transition.new_state.clone();
             debug!("new state: {:?}", self.state);
@@ -116,12 +117,12 @@ mod tests {
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
         let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new(initial.clone(), states);
+        let machine = StateMachine::new(&initial, states);
 
-        machine.event(e1.clone())?;
+        machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
         // in seconde state, there are no transitions
-        assert!(machine.event(e1).is_err());
+        assert!(machine.event(&e1).is_err());
         machine.reset();
         assert_eq!(machine.current_state().name, "initial");
         Ok(())
