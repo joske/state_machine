@@ -116,7 +116,7 @@ mod tests {
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
         let states = vec![initial.clone(), second.clone()];
-        let mut machine = StateMachine::new(initial.clone(), states);
+        let machine = StateMachine::new(initial.clone(), states);
 
         machine.event(e1.clone())?;
         assert_eq!(machine.current_state().name, "second");
