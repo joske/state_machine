@@ -13,6 +13,11 @@ pub struct State {
 }
 
 impl State {
+    /// Create a new state
+    /// # Arguments
+    /// * `name` - the name of the state
+    /// # Returns
+    /// The new state
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -20,6 +25,11 @@ impl State {
         }
     }
 
+    /// Add a transition to the state
+    /// # Arguments
+    /// * `event` - the trigger for the transition
+    /// * `new_state` - the new state after the event
+    /// * `action` - an optional action to execute when the event is triggered
     pub fn add_event(&mut self, event: Event, new_state: State, action: Option<Action>) {
         let t = Transition {
             old_state: self.clone(),
@@ -45,6 +55,11 @@ pub struct Event {
 }
 
 impl Event {
+    /// Create a new event
+    /// # Arguments
+    /// * `name` - the name of the event
+    /// # Returns
+    /// The new event
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
     }
@@ -75,6 +90,10 @@ pub struct StateMachine {
 
 impl StateMachine {
     #[must_use]
+    /// Create a new state machine
+    /// # Arguments
+    /// * `initial_state` - the initial state of the machine
+    /// * `states` - the list of all states
     pub fn new(initial_state: &State, states: Vec<State>) -> Self {
         Self {
             state: RwLock::new(initial_state.clone()),
@@ -83,6 +102,11 @@ impl StateMachine {
         }
     }
 
+    /// Handle an event
+    /// # Errors
+    /// If no transition is found for the event in the current state
+    /// or if the action fails
+    /// or if the lock is poisoned
     pub fn event(&self, event: &Event) -> Result<()> {
         debug!("handling event: {:?}", event);
         let mut state = self
@@ -106,11 +130,13 @@ impl StateMachine {
         }
     }
 
+    /// Reset the state machine to its initial state
     pub fn reset(&self) {
         let mut state = self.state.write().expect("failed to get lock");
         *state = self.initial_state.clone();
     }
 
+    /// Get the current state
     pub fn current_state(&self) -> State {
         self.state.read().unwrap().clone()
     }
