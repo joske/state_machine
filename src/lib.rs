@@ -61,16 +61,12 @@ pub struct StateMachine {
 }
 
 impl StateMachine {
-    pub fn new(initial_state: State) -> Self {
+    pub fn new(initial_state: State, states: Vec<State>) -> Self {
         Self {
             state: RwLock::new(initial_state.clone()),
             initial_state: initial_state.clone(),
-            states: vec![initial_state],
+            states,
         }
-    }
-
-    pub fn add_state(&mut self, state: State) {
-        self.states.push(state);
     }
 
     pub fn event(&self, event: Event) -> Result<()> {
@@ -87,8 +83,11 @@ impl StateMachine {
             if let Some(action) = transition.action {
                 return action();
             }
+            Ok(())
+        } else {
+            debug!("no transition found");
+            Err(anyhow::anyhow!("no transition found"))?
         }
-        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -110,18 +109,18 @@ mod tests {
         let mut initial = State::new("initial");
         let e1 = Event::new("e1");
         let second = State::new("second");
-        initial.add_event(
-            e1.clone(),
-            second.clone(),
-            Some(|| {
-                println!("action");
-                Ok(())
-            }),
-        );
-        let mut machine = StateMachine::new(initial.clone());
-        machine.add_state(second);
-        machine.event(e1)?;
+        let action = || {
+            println!("action");
+            Ok(())
+        };
+        initial.add_event(e1.clone(), second.clone(), Some(action));
+        let states = vec![initial.clone(), second.clone()];
+        let mut machine = StateMachine::new(initial.clone(), states);
+
+        machine.event(e1.clone())?;
         assert_eq!(machine.current_state().name, "second");
+        // in seconde state, there are no transitions
+        assert!(machine.event(e1).is_err());
         machine.reset();
         assert_eq!(machine.current_state().name, "initial");
         Ok(())
