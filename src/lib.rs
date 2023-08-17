@@ -1,8 +1,9 @@
 use anyhow::Result;
-use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::hash::Hash;
 use std::sync::RwLock;
-use tracing::debug;
+use std::{collections::HashMap, fmt::Display};
+use tracing::{debug, error};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -30,6 +31,12 @@ impl State {
     }
 }
 
+impl Display for State {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "'{}'", self.name)
+    }
+}
+
 type Action = fn() -> Result<()>;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
@@ -40,6 +47,12 @@ pub struct Event {
 impl Event {
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
+    }
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "'{}'", self.name)
     }
 }
 
@@ -86,8 +99,10 @@ impl StateMachine {
             }
             Ok(())
         } else {
-            debug!("no transition found");
-            Err(anyhow::anyhow!("no transition found"))?
+            error!("no transition found for event {event} in state {state}");
+            Err(anyhow::anyhow!(
+                "no transition found for event {event} in state {state}"
+            ))?
         }
     }
 
@@ -103,16 +118,18 @@ impl StateMachine {
 
 #[cfg(test)]
 mod tests {
+    use tracing_test::traced_test;
+
     use super::*;
 
+    #[traced_test]
     #[test]
     fn test_two_states() -> Result<()> {
-        tracing_subscriber::fmt::init();
         let mut initial = State::new("initial");
         let e1 = Event::new("e1");
         let second = State::new("second");
         let action = || {
-            println!("action");
+            debug!("action directe!");
             Ok(())
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
