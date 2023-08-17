@@ -90,6 +90,14 @@ impl StateMachine {
         }
         Ok(())
     }
+
+    pub fn reset(&mut self) {
+        self.state = RwLock::new(self.initial_state.clone());
+    }
+
+    pub fn current_state(&self) -> State {
+        self.state.read().unwrap().clone()
+    }
 }
 
 #[cfg(test)]
@@ -113,7 +121,9 @@ mod tests {
         let mut machine = StateMachine::new(initial.clone());
         machine.add_state(second);
         machine.event(e1)?;
-        assert_eq!(machine.state.read().unwrap().name, "second");
+        assert_eq!(machine.current_state().name, "second");
+        machine.reset();
+        assert_eq!(machine.current_state().name, "initial");
         Ok(())
     }
 }
