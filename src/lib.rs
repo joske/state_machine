@@ -176,6 +176,20 @@ mod tests {
 
     #[traced_test]
     #[test]
+    fn test_one_state() -> Result<()> {
+        let mut initial: State<fn() -> Result<()>> = State::new("initial");
+        let e1 = Event::new("e1");
+        initial.add_event(e1.clone(), initial.clone(), None);
+        let states = vec![initial.clone()];
+        let machine = StateMachine::new(&initial, states);
+
+        machine.event(&e1)?;
+        assert_eq!(machine.current_state().name, "initial");
+        Ok(())
+    }
+
+    #[traced_test]
+    #[test]
     fn test_two_states() -> Result<()> {
         let mut initial = State::new("initial");
         let e1 = Event::new("e1");
@@ -198,5 +212,22 @@ mod tests {
         machine.reset();
         assert_eq!(machine.current_state().name, "initial");
         Ok(())
+    }
+
+    #[traced_test]
+    #[test]
+    #[should_panic]
+    fn test_panics() -> () {
+        let mut initial = State::new("initial");
+        let e1 = Event::new("e1");
+        let second = State::new("second");
+        let action = || {
+            panic!("action failed");
+        };
+        initial.add_event(e1.clone(), second.clone(), Some(action));
+        let states = vec![initial.clone(), second.clone()];
+        let machine = StateMachine::new(&initial, states);
+
+        machine.event(&e1).unwrap();
     }
 }
