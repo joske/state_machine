@@ -9,7 +9,7 @@ use tracing::{debug, error};
 #[derive(Debug, Clone)]
 pub struct State<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
     name: String,
     events: HashMap<Event, Transition<F>>,
@@ -17,7 +17,7 @@ where
 
 impl<F> State<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
     /// Create a new state
     /// # Arguments
@@ -39,7 +39,7 @@ where
     /// action never panics.
     pub fn add_event(&mut self, event: Event, new_state: State<F>, action: Option<F>)
     where
-        F: FnOnce() -> Result<()> + Clone,
+        F: Fn() -> Result<()> + Clone,
     {
         let t = Transition {
             old_state: self.clone(),
@@ -53,7 +53,7 @@ where
 
 impl<F> Display for State<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "'{}'", self.name)
@@ -86,7 +86,7 @@ impl Display for Event {
 #[derive(Debug, Clone)]
 struct Transition<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
     old_state: State<F>,
     trigger: Event,
@@ -98,8 +98,9 @@ where
 #[derive(Debug)]
 pub struct StateMachine<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
+    name: String,
     state: RwLock<State<F>>,
     initial_state: State<F>,
     states: Vec<State<F>>,
@@ -107,15 +108,16 @@ where
 
 impl<F> StateMachine<F>
 where
-    F: FnOnce() -> Result<()> + Clone,
+    F: Fn() -> Result<()> + Clone,
 {
     #[must_use]
     /// Create a new state machine
     /// # Arguments
     /// * `initial_state` - the initial state of the machine
     /// * `states` - the list of all states
-    pub fn new(initial_state: &State<F>, states: Vec<State<F>>) -> Self {
+    pub fn new(name: impl Into<String>, initial_state: &State<F>, states: Vec<State<F>>) -> Self {
         Self {
+            name: name.into(),
             state: RwLock::new(initial_state.clone()),
             initial_state: initial_state.clone(),
             states,
@@ -133,11 +135,16 @@ where
             .state
             .write()
             .map_err(|_| anyhow::anyhow!("lock error"))?;
-        debug!("state: {:?}", state.name);
         let transition = state.events.get(event).cloned();
         if let Some(transition) = transition {
-            *state = transition.new_state.clone();
-            debug!("new state: {:?}", state.name);
+            let new_state = transition.new_state.clone();
+            debug!(
+                "{}: {:?} -> {:?}",
+                self.name,
+                state.name,
+                new_state.clone().name,
+            );
+            *state = new_state;
             if let Some(action) = transition.action {
                 return action();
             }
@@ -179,7 +186,7 @@ mod tests {
         let e1 = Event::new("e1");
         initial.add_event(e1.clone(), initial.clone(), None);
         let states = vec![initial.clone()];
-        let machine = StateMachine::new(&initial, states);
+        let machine = StateMachine::new("test", &initial, states);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "initial");
@@ -200,7 +207,7 @@ mod tests {
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
         let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new(&initial, states);
+        let machine = StateMachine::new("test", &initial, states);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -208,7 +215,14 @@ mod tests {
         assert!(machine.event(&e1).is_err());
         assert!(action_called.load(Ordering::SeqCst));
         machine.reset();
+
+        // check if we can call the action again
         assert_eq!(machine.current_state().name, "initial");
+        action_called.store(false, Ordering::SeqCst);
+        assert!(!action_called.load(Ordering::SeqCst));
+        machine.event(&e1)?;
+        assert_eq!(machine.current_state().name, "second");
+        assert!(action_called.load(Ordering::SeqCst));
         Ok(())
     }
 
@@ -226,7 +240,7 @@ mod tests {
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
         let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new(&initial, states);
+        let machine = StateMachine::new("test", &initial, states);
 
         let result = machine.event(&e1);
         assert_eq!(machine.current_state().name, "second");
@@ -247,7 +261,7 @@ mod tests {
         let second = State::new("second");
         initial.add_event(e1.clone(), second.clone(), Some(regular_function));
         let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new(&initial, states);
+        let machine = StateMachine::new("test", &initial, states);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -270,7 +284,7 @@ mod tests {
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
         let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new(&initial, states);
+        let machine = StateMachine::new("test", &initial, states);
 
         machine.event(&e1).unwrap();
     }
