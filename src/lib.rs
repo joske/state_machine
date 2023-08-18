@@ -39,7 +39,6 @@ impl Event {
 }
 
 #[allow(dead_code)]
-// #[derive(Debug, Clone)]
 struct Transition {
     trigger: Event,
     new_state: State,
@@ -47,7 +46,6 @@ struct Transition {
 }
 
 #[allow(dead_code)]
-// #[derive(Debug)]
 pub struct StateMachine {
     name: String,
     state: RwLock<State>,
@@ -237,8 +235,8 @@ mod tests {
             .add_event(second.clone(), e2.clone(), initial.clone(), Some(action2))
             .build();
 
-        assert!(!action_called.load(Ordering::SeqCst));
         assert_eq!(machine.current_state(), initial);
+        assert!(!action_called.load(Ordering::SeqCst));
         machine.event(&e1)?;
         assert_eq!(machine.current_state(), second);
         assert!(action_called.load(Ordering::SeqCst));
