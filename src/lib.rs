@@ -84,7 +84,7 @@ impl Display for Event {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct Transition<F>
+struct Transition<F>
 where
     F: FnOnce() -> Result<()> + Clone,
 {
@@ -204,7 +204,7 @@ mod tests {
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
-        // in seconde state, there are no transitions
+        // in `second` state, there are no transitions
         assert!(machine.event(&e1).is_err());
         assert!(action_called.load(Ordering::SeqCst));
         machine.reset();
