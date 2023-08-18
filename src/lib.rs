@@ -139,8 +139,8 @@ where
     F: Fn() -> Result<()> + Clone,
 {
     name: String,
-    state: Option<RwLock<State>>,
-    initial_state: Option<State>,
+    state: RwLock<State>,
+    initial_state: State,
     events: HashMap<State, HashMap<Event, Transition<F>>>,
 }
 
@@ -149,20 +149,13 @@ where
     F: Fn() -> Result<()> + Clone,
 {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, initial_state: &State) -> Self {
         Self {
             name: name.into(),
-            state: None,
-            initial_state: None,
+            state: RwLock::new(initial_state.clone()),
+            initial_state: initial_state.clone(),
             events: HashMap::new(),
         }
-    }
-
-    #[must_use]
-    pub fn initial_state(mut self, initial_state: &State) -> Self {
-        self.initial_state = Some(initial_state.clone());
-        self.state = Some(RwLock::new(initial_state.clone()));
-        self
     }
 
     #[must_use]
@@ -191,13 +184,10 @@ where
     where
         F: Fn() -> Result<()> + Clone,
     {
-        let name = self.name;
-        let state = self.state.expect("initial state not set");
-        let initial_state = self.initial_state.expect("initial state not set");
         StateMachine {
-            name,
-            state,
-            initial_state,
+            name: self.name,
+            state: self.state,
+            initial_state: self.initial_state,
             events: self.events,
         }
     }
@@ -214,8 +204,7 @@ mod tests {
     fn test_one_state() -> Result<()> {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
-        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), initial.clone(), None)
             .build();
 
@@ -236,8 +225,7 @@ mod tests {
             action_called.store(true, Ordering::SeqCst);
             Ok(())
         };
-        let machine = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
             .build();
 
@@ -265,8 +253,7 @@ mod tests {
         let second = State::new("second");
         let e1 = Event::new("e1");
         let e2 = Event::new("e2");
-        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), None)
             .add_event(second.clone(), e2.clone(), initial.clone(), None)
             .build();
@@ -291,8 +278,7 @@ mod tests {
             action_called.store(true, Ordering::SeqCst);
             Err(anyhow::anyhow!("action failed"))
         };
-        let machine = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
             .build();
 
@@ -313,8 +299,7 @@ mod tests {
         let initial = State::new("initial");
         let second = State::new("second");
         let e1 = Event::new("e1");
-        let machine = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine = StateMachineBuilder::new("test", &initial)
             .add_event(
                 initial.clone(),
                 e1.clone(),
@@ -341,8 +326,7 @@ mod tests {
         let action = || {
             panic!("action failed");
         };
-        let machine = StateMachineBuilder::new("test")
-            .initial_state(&initial)
+        let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), initial.clone(), Some(action))
             .build();
 
