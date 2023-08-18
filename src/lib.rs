@@ -77,25 +77,6 @@ impl<F> StateMachine<F>
 where
     F: Fn() -> Result<()> + Clone,
 {
-    /// Add a transition to the state
-    /// # Arguments
-    /// * `event` - the trigger for the transition
-    /// * `new_state` - the new state after the event
-    /// * `action` - an optional action to execute when the event is triggered. Make sure this
-    /// action never panics.
-    pub fn add_event(&mut self, old_state: State, event: Event, new_state: State, action: Option<F>)
-    where
-        F: Fn() -> Result<()> + Clone,
-    {
-        let state_events = self.events.entry(old_state).or_insert_with(HashMap::new);
-        let t = Transition {
-            trigger: event.clone(),
-            new_state,
-            action,
-        };
-        state_events.insert(event, t);
-    }
-
     /// Handle an event
     /// # Errors
     /// If no transition is found for the event in the current state
@@ -211,8 +192,8 @@ where
         F: Fn() -> Result<()> + Clone,
     {
         let name = self.name;
-        let state = self.state.unwrap();
-        let initial_state = self.initial_state.unwrap();
+        let state = self.state.expect("initial state not set");
+        let initial_state = self.initial_state.expect("initial state not set");
         StateMachine {
             name,
             state,
@@ -247,8 +228,8 @@ mod tests {
     #[test]
     fn test_two_states() -> Result<()> {
         let initial = State::new("initial");
-        let e1 = Event::new("e1");
         let second = State::new("second");
+        let e1 = Event::new("e1");
         let action_called = AtomicBool::new(false);
         let action = || {
             debug!("action directe!");
@@ -281,16 +262,16 @@ mod tests {
     #[test]
     fn test_two_states_circular() -> Result<()> {
         let initial = State::new("initial");
+        let second = State::new("second");
         let e1 = Event::new("e1");
         let e2 = Event::new("e2");
-        let second = State::new("second");
         let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test")
             .initial_state(&initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), None)
             .add_event(second.clone(), e2.clone(), initial.clone(), None)
             .build();
 
-        assert_eq!(machine.current_state().name, "initial");
+        assert_eq!(machine.current_state(), initial);
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
         machine.event(&e2)?;
@@ -302,8 +283,8 @@ mod tests {
     #[test]
     fn test_action_fails() -> Result<()> {
         let initial = State::new("initial");
-        let e1 = Event::new("e1");
         let second = State::new("second");
+        let e1 = Event::new("e1");
         let action_called = AtomicBool::new(false);
         let action = || {
             debug!("action directe!");
@@ -330,8 +311,8 @@ mod tests {
     #[test]
     fn test_regular_function() -> Result<()> {
         let initial = State::new("initial");
-        let e1 = Event::new("e1");
         let second = State::new("second");
+        let e1 = Event::new("e1");
         let machine = StateMachineBuilder::new("test")
             .initial_state(&initial)
             .add_event(
@@ -357,13 +338,12 @@ mod tests {
     fn test_panics() -> () {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
-        let second = State::new("second");
         let action = || {
             panic!("action failed");
         };
         let machine = StateMachineBuilder::new("test")
             .initial_state(&initial)
-            .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
+            .add_event(initial.clone(), e1.clone(), initial.clone(), Some(action))
             .build();
 
         machine.event(&e1).unwrap();
