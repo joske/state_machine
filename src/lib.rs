@@ -35,7 +35,8 @@ where
     /// # Arguments
     /// * `event` - the trigger for the transition
     /// * `new_state` - the new state after the event
-    /// * `action` - an optional action to execute when the event is triggered
+    /// * `action` - an optional action to execute when the event is triggered. Make sure this
+    /// action never panics.
     pub fn add_event(&mut self, event: Event, new_state: State<F>, action: Option<F>)
     where
         F: FnOnce() -> Result<()> + Clone,
@@ -150,6 +151,8 @@ where
     }
 
     /// Reset the state machine to its initial state
+    /// #Panics
+    /// If the lock is poisoned
     pub fn reset(&self) {
         let mut state = self.state.write().expect("failed to get lock");
         *state = self.initial_state.clone();
