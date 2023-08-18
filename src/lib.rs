@@ -7,12 +7,18 @@ use tracing::{debug, error};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct State<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
     name: String,
-    events: HashMap<Event, Transition>,
+    events: HashMap<Event, Transition<F>>,
 }
 
-impl State {
+impl<F> State<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
     /// Create a new state
     /// # Arguments
     /// * `name` - the name of the state
@@ -30,7 +36,10 @@ impl State {
     /// * `event` - the trigger for the transition
     /// * `new_state` - the new state after the event
     /// * `action` - an optional action to execute when the event is triggered
-    pub fn add_event(&mut self, event: Event, new_state: State, action: Option<Action>) {
+    pub fn add_event(&mut self, event: Event, new_state: State<F>, action: Option<F>)
+    where
+        F: FnOnce() -> Result<()> + Clone,
+    {
         let t = Transition {
             old_state: self.clone(),
             trigger: event.clone(),
@@ -41,13 +50,14 @@ impl State {
     }
 }
 
-impl Display for State {
+impl<F> Display for State<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "'{}'", self.name)
     }
 }
-
-type Action = fn() -> Result<()>;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct Event {
@@ -73,28 +83,37 @@ impl Display for Event {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct Transition {
-    old_state: State,
+pub struct Transition<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
+    old_state: State<F>,
     trigger: Event,
-    new_state: State,
-    action: Option<Action>,
+    new_state: State<F>,
+    action: Option<F>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct StateMachine {
-    state: RwLock<State>,
-    initial_state: State,
-    states: Vec<State>,
+pub struct StateMachine<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
+    state: RwLock<State<F>>,
+    initial_state: State<F>,
+    states: Vec<State<F>>,
 }
 
-impl StateMachine {
+impl<F> StateMachine<F>
+where
+    F: FnOnce() -> Result<()> + Clone,
+{
     #[must_use]
     /// Create a new state machine
     /// # Arguments
     /// * `initial_state` - the initial state of the machine
     /// * `states` - the list of all states
-    pub fn new(initial_state: &State, states: Vec<State>) -> Self {
+    pub fn new(initial_state: &State<F>, states: Vec<State<F>>) -> Self {
         Self {
             state: RwLock::new(initial_state.clone()),
             initial_state: initial_state.clone(),
@@ -113,11 +132,11 @@ impl StateMachine {
             .state
             .write()
             .map_err(|_| anyhow::anyhow!("lock error"))?;
-        debug!("state: {:?}", state);
+        debug!("state: {:?}", state.name);
         let transition = state.events.get(event).cloned();
         if let Some(transition) = transition {
             *state = transition.new_state.clone();
-            debug!("new state: {:?}", self.state);
+            debug!("new state: {:?}", state.name);
             if let Some(action) = transition.action {
                 return action();
             }
@@ -137,13 +156,17 @@ impl StateMachine {
     }
 
     /// Get the current state
-    pub fn current_state(&self) -> State {
-        self.state.read().unwrap().clone()
+    /// #Panics
+    /// If the lock is poisoned
+    pub fn current_state(&self) -> State<F> {
+        self.state.read().expect("failed to get lock").clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use tracing_test::traced_test;
 
     use super::*;
@@ -154,8 +177,10 @@ mod tests {
         let mut initial = State::new("initial");
         let e1 = Event::new("e1");
         let second = State::new("second");
+        let action_called = AtomicBool::new(false);
         let action = || {
             debug!("action directe!");
+            action_called.store(true, Ordering::SeqCst);
             Ok(())
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
@@ -166,6 +191,7 @@ mod tests {
         assert_eq!(machine.current_state().name, "second");
         // in seconde state, there are no transitions
         assert!(machine.event(&e1).is_err());
+        assert!(action_called.load(Ordering::SeqCst));
         machine.reset();
         assert_eq!(machine.current_state().name, "initial");
         Ok(())
