@@ -42,7 +42,6 @@ where
         F: Fn() -> Result<()> + Clone,
     {
         let t = Transition {
-            old_state: self.clone(),
             trigger: event.clone(),
             new_state,
             action,
@@ -88,7 +87,6 @@ struct Transition<F>
 where
     F: Fn() -> Result<()> + Clone,
 {
-    old_state: State<F>,
     trigger: Event,
     new_state: State<F>,
     action: Option<F>,
