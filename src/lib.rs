@@ -168,11 +168,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    use tracing_test::traced_test;
-
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tracing_test::traced_test;
 
     #[traced_test]
     #[test]
