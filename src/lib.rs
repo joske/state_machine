@@ -149,7 +149,7 @@ where
             error!("no transition found for event {event} in state {state}");
             Err(anyhow::anyhow!(
                 "no transition found for event {event} in state {state}"
-            ))?
+            ))
         }
     }
 
