@@ -39,32 +39,23 @@ impl Event {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
-struct Transition<F>
-where
-    F: Fn() -> Result<()> + Clone,
-{
+// #[derive(Debug, Clone)]
+struct Transition {
     trigger: Event,
     new_state: State,
-    action: Option<F>,
+    action: Option<Box<dyn Fn() -> Result<()>>>,
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
-pub struct StateMachine<F>
-where
-    F: Fn() -> Result<()> + Clone,
-{
+// #[derive(Debug)]
+pub struct StateMachine {
     name: String,
     state: RwLock<State>,
     initial_state: State,
-    events: HashMap<State, HashMap<Event, Transition<F>>>,
+    events: HashMap<State, HashMap<Event, Transition>>,
 }
 
-impl<F> StateMachine<F>
-where
-    F: Fn() -> Result<()> + Clone,
-{
+impl StateMachine {
     /// Handle an event
     /// # Errors
     /// If no transition is found for the event in the current state
@@ -78,12 +69,12 @@ where
             .map_err(|_| anyhow::anyhow!("lock error"))?;
         let state_events = self.events.get(&state);
         if let Some(state_events) = state_events {
-            let transition = state_events.get(event).cloned();
+            let transition = state_events.get(event);
             if let Some(transition) = transition {
                 let new_state = transition.new_state.clone();
                 debug!("{}: {} -> {}", self.name, state, new_state.clone(),);
                 *state = new_state;
-                if let Some(action) = transition.action {
+                if let Some(ref action) = transition.action {
                     return action();
                 }
                 Ok(())
@@ -117,20 +108,14 @@ where
     }
 }
 
-pub struct StateMachineBuilder<F>
-where
-    F: Fn() -> Result<()> + Clone,
-{
+pub struct StateMachineBuilder {
     name: String,
     state: RwLock<State>,
     initial_state: State,
-    events: HashMap<State, HashMap<Event, Transition<F>>>,
+    events: HashMap<State, HashMap<Event, Transition>>,
 }
 
-impl<F> StateMachineBuilder<F>
-where
-    F: Fn() -> Result<()> + Clone,
-{
+impl StateMachineBuilder {
     #[must_use]
     pub fn new(name: impl Into<String>, initial_state: &State) -> Self {
         Self {
@@ -147,11 +132,8 @@ where
         old_state: State,
         event: Event,
         new_state: State,
-        action: Option<F>,
-    ) -> Self
-    where
-        F: Fn() -> Result<()> + Clone,
-    {
+        action: Option<Box<dyn Fn() -> Result<()>>>,
+    ) -> Self {
         let state_events = self.events.entry(old_state).or_insert_with(HashMap::new);
         let t = Transition {
             trigger: event.clone(),
@@ -163,10 +145,7 @@ where
     }
 
     #[must_use]
-    pub fn build(self) -> StateMachine<F>
-    where
-        F: Fn() -> Result<()> + Clone,
-    {
+    pub fn build(self) -> StateMachine {
         StateMachine {
             name: self.name,
             state: self.state,
@@ -179,7 +158,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
     use tracing_test::traced_test;
 
     #[traced_test]
@@ -187,7 +169,7 @@ mod tests {
     fn test_one_state() -> Result<()> {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
-        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test", &initial)
+        let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), initial.clone(), None)
             .build();
 
@@ -202,12 +184,13 @@ mod tests {
         let initial = State::new("initial");
         let second = State::new("second");
         let e1 = Event::new("e1");
-        let action_called = AtomicBool::new(false);
-        let action = || {
+        let action_called = Arc::new(AtomicBool::new(false));
+        let action_called_clone = action_called.clone();
+        let action = Box::new(move || {
             debug!("action directe!");
-            action_called.store(true, Ordering::SeqCst);
+            action_called_clone.store(true, Ordering::SeqCst);
             Ok(())
-        };
+        });
         let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
             .build();
@@ -236,16 +219,32 @@ mod tests {
         let second = State::new("second");
         let e1 = Event::new("e1");
         let e2 = Event::new("e2");
-        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test", &initial)
-            .add_event(initial.clone(), e1.clone(), second.clone(), None)
-            .add_event(second.clone(), e2.clone(), initial.clone(), None)
+        let action_called = Arc::new(AtomicBool::new(false));
+        let action_called_clone = action_called.clone();
+        let action1 = Box::new(move || {
+            debug!("turn on");
+            action_called_clone.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+        let action_called_clone2 = action_called.clone();
+        let action2 = Box::new(move || {
+            debug!("turn off");
+            action_called_clone2.store(false, Ordering::SeqCst);
+            Ok(())
+        });
+        let machine = StateMachineBuilder::new("test", &initial)
+            .add_event(initial.clone(), e1.clone(), second.clone(), Some(action1))
+            .add_event(second.clone(), e2.clone(), initial.clone(), Some(action2))
             .build();
 
+        assert!(!action_called.load(Ordering::SeqCst));
         assert_eq!(machine.current_state(), initial);
         machine.event(&e1)?;
         assert_eq!(machine.current_state(), second);
+        assert!(action_called.load(Ordering::SeqCst));
         machine.event(&e2)?;
         assert_eq!(machine.current_state(), initial);
+        assert!(!action_called.load(Ordering::SeqCst));
         Ok(())
     }
 
@@ -255,12 +254,13 @@ mod tests {
         let initial = State::new("initial");
         let second = State::new("second");
         let e1 = Event::new("e1");
-        let action_called = AtomicBool::new(false);
-        let action = || {
+        let action_called = Arc::new(AtomicBool::new(false));
+        let action_called_clone = action_called.clone();
+        let action = Box::new(move || {
             debug!("action directe!");
-            action_called.store(true, Ordering::SeqCst);
+            action_called_clone.store(true, Ordering::SeqCst);
             Err(anyhow::anyhow!("action failed"))
-        };
+        });
         let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
             .build();
@@ -287,7 +287,7 @@ mod tests {
                 initial.clone(),
                 e1.clone(),
                 second.clone(),
-                Some(regular_function),
+                Some(Box::new(regular_function)),
             )
             .build();
 
@@ -306,9 +306,9 @@ mod tests {
     fn test_panics() -> () {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
-        let action = || {
+        let action = Box::new(|| {
             panic!("action failed");
-        };
+        });
         let machine = StateMachineBuilder::new("test", &initial)
             .add_event(initial.clone(), e1.clone(), initial.clone(), Some(action))
             .build();
