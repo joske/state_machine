@@ -220,7 +220,7 @@ mod tests {
             .build();
 
         machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "initial");
+        assert_eq!(machine.current_state(), initial);
         Ok(())
     }
 
@@ -242,18 +242,18 @@ mod tests {
             .build();
 
         machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "second");
+        assert_eq!(machine.current_state(), second);
         // in `second` state, there are no transitions
         assert!(machine.event(&e1).is_err());
         assert!(action_called.load(Ordering::SeqCst));
         machine.reset();
 
         // check if we can call the action again
-        assert_eq!(machine.current_state().name, "initial");
+        assert_eq!(machine.current_state(), initial);
         action_called.store(false, Ordering::SeqCst);
         assert!(!action_called.load(Ordering::SeqCst));
         machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "second");
+        assert_eq!(machine.current_state(), second);
         assert!(action_called.load(Ordering::SeqCst));
         Ok(())
     }
@@ -273,9 +273,9 @@ mod tests {
 
         assert_eq!(machine.current_state(), initial);
         machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "second");
+        assert_eq!(machine.current_state(), second);
         machine.event(&e2)?;
-        assert_eq!(machine.current_state().name, "initial");
+        assert_eq!(machine.current_state(), initial);
         Ok(())
     }
 
@@ -297,7 +297,7 @@ mod tests {
             .build();
 
         let result = machine.event(&e1);
-        assert_eq!(machine.current_state().name, "second");
+        assert_eq!(machine.current_state(), second);
         assert!(result.is_err());
         Ok(())
     }
@@ -324,11 +324,11 @@ mod tests {
             .build();
 
         machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "second");
+        assert_eq!(machine.current_state(), second);
         // in seconde state, there are no transitions
         assert!(machine.event(&e1).is_err());
         machine.reset();
-        assert_eq!(machine.current_state().name, "initial");
+        assert_eq!(machine.current_state(), initial);
         Ok(())
     }
 
