@@ -214,6 +214,52 @@ mod tests {
 
     #[traced_test]
     #[test]
+    fn test_action_fails() -> Result<()> {
+        let mut initial = State::new("initial");
+        let e1 = Event::new("e1");
+        let second = State::new("second");
+        let action_called = AtomicBool::new(false);
+        let action = || {
+            debug!("action directe!");
+            action_called.store(true, Ordering::SeqCst);
+            Err(anyhow::anyhow!("action failed"))
+        };
+        initial.add_event(e1.clone(), second.clone(), Some(action));
+        let states = vec![initial.clone(), second.clone()];
+        let machine = StateMachine::new(&initial, states);
+
+        let result = machine.event(&e1);
+        assert_eq!(machine.current_state().name, "second");
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    fn regular_function() -> Result<()> {
+        debug!("action indirecte!");
+        Ok(())
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_regular_function() -> Result<()> {
+        let mut initial = State::new("initial");
+        let e1 = Event::new("e1");
+        let second = State::new("second");
+        initial.add_event(e1.clone(), second.clone(), Some(regular_function));
+        let states = vec![initial.clone(), second.clone()];
+        let machine = StateMachine::new(&initial, states);
+
+        machine.event(&e1)?;
+        assert_eq!(machine.current_state().name, "second");
+        // in seconde state, there are no transitions
+        assert!(machine.event(&e1).is_err());
+        machine.reset();
+        assert_eq!(machine.current_state().name, "initial");
+        Ok(())
+    }
+
+    #[traced_test]
+    #[test]
     #[should_panic]
     fn test_panics() -> () {
         let mut initial = State::new("initial");
