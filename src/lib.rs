@@ -103,7 +103,6 @@ where
     name: String,
     state: RwLock<State<F>>,
     initial_state: State<F>,
-    states: Vec<State<F>>,
 }
 
 impl<F> StateMachine<F>
@@ -113,14 +112,13 @@ where
     #[must_use]
     /// Create a new state machine
     /// # Arguments
+    /// * `name` - the name of this state machine
     /// * `initial_state` - the initial state of the machine
-    /// * `states` - the list of all states
-    pub fn new(name: impl Into<String>, initial_state: &State<F>, states: Vec<State<F>>) -> Self {
+    pub fn new(name: impl Into<String>, initial_state: &State<F>) -> Self {
         Self {
             name: name.into(),
             state: RwLock::new(initial_state.clone()),
             initial_state: initial_state.clone(),
-            states,
         }
     }
 
@@ -185,8 +183,7 @@ mod tests {
         let mut initial: State<fn() -> Result<()>> = State::new("initial");
         let e1 = Event::new("e1");
         initial.add_event(e1.clone(), initial.clone(), None);
-        let states = vec![initial.clone()];
-        let machine = StateMachine::new("test", &initial, states);
+        let machine = StateMachine::new("test", &initial);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "initial");
@@ -206,8 +203,7 @@ mod tests {
             Ok(())
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
-        let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new("test", &initial, states);
+        let machine = StateMachine::new("test", &initial);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -239,8 +235,7 @@ mod tests {
             Err(anyhow::anyhow!("action failed"))
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
-        let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new("test", &initial, states);
+        let machine = StateMachine::new("test", &initial);
 
         let result = machine.event(&e1);
         assert_eq!(machine.current_state().name, "second");
@@ -260,8 +255,7 @@ mod tests {
         let e1 = Event::new("e1");
         let second = State::new("second");
         initial.add_event(e1.clone(), second.clone(), Some(regular_function));
-        let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new("test", &initial, states);
+        let machine = StateMachine::new("test", &initial);
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -283,8 +277,7 @@ mod tests {
             panic!("action failed");
         };
         initial.add_event(e1.clone(), second.clone(), Some(action));
-        let states = vec![initial.clone(), second.clone()];
-        let machine = StateMachine::new("test", &initial, states);
+        let machine = StateMachine::new("test", &initial);
 
         machine.event(&e1).unwrap();
     }
