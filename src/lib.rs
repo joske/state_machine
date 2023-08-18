@@ -70,12 +70,14 @@ impl StateMachine {
             let transition = state_events.get(event);
             if let Some(transition) = transition {
                 let new_state = transition.new_state.clone();
-                debug!("{}: {} -> {}", self.name, state, new_state.clone(),);
+                debug!("{}: {} -> {}", self.name, state, new_state.clone());
                 *state = new_state;
                 if let Some(ref action) = transition.action {
-                    return action();
+                    action()
+                } else {
+                    // no action, just return Ok
+                    Ok(())
                 }
-                Ok(())
             } else {
                 error!("no transition found for event {event} in state {state}");
                 Err(anyhow::anyhow!(
@@ -125,6 +127,14 @@ impl StateMachineBuilder {
     }
 
     #[must_use]
+    /// Add an event to the state machine
+    /// # Arguments
+    /// * `old_state` - the state in which the event is handled
+    ///            (the state before the transition)
+    /// * `event` - the event
+    /// * `new_state` - the state after the transition
+    /// * `action` - an optional action to execute when the event is handled
+    /// Make sure this never panics - as this would poison the lock and cause the state machine to fail
     pub fn add_event(
         mut self,
         old_state: State,
