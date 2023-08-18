@@ -175,6 +175,26 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use tracing_test::traced_test;
 
+    #[test]
+    fn test_state_clone() {
+        let mut initial: State<fn() -> Result<()>> = State::new("initial");
+        let e1 = Event::new("e1");
+        initial.add_event(e1.clone(), initial.clone(), None);
+        assert_eq!(1, initial.events.len());
+        let clone = initial.clone();
+        assert_eq!(1, clone.events.len());
+    }
+
+    #[test]
+    fn test_state_with_action_clone() {
+        let mut initial: State<fn() -> Result<()>> = State::new("initial");
+        let e1 = Event::new("e1");
+        initial.add_event(e1.clone(), initial.clone(), Some(|| Ok(())));
+        assert_eq!(1, initial.events.len());
+        let clone = initial.clone();
+        assert_eq!(1, clone.events.len());
+    }
+
     #[traced_test]
     #[test]
     fn test_one_state() -> Result<()> {
