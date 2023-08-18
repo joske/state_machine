@@ -77,20 +77,6 @@ impl<F> StateMachine<F>
 where
     F: Fn() -> Result<()> + Clone,
 {
-    #[must_use]
-    /// Create a new state machine
-    /// # Arguments
-    /// * `name` - the name of this state machine
-    /// * `initial_state` - the initial state of the machine
-    pub fn new(name: impl Into<String>, initial_state: &State) -> Self {
-        Self {
-            name: name.into(),
-            state: RwLock::new(initial_state.clone()),
-            initial_state: initial_state.clone(),
-            events: HashMap::new(),
-        }
-    }
-
     /// Add a transition to the state
     /// # Arguments
     /// * `event` - the trigger for the transition
@@ -167,6 +153,75 @@ where
     }
 }
 
+pub struct StateMachineBuilder<F>
+where
+    F: Fn() -> Result<()> + Clone,
+{
+    name: String,
+    state: Option<RwLock<State>>,
+    initial_state: Option<State>,
+    events: HashMap<State, HashMap<Event, Transition<F>>>,
+}
+
+impl<F> StateMachineBuilder<F>
+where
+    F: Fn() -> Result<()> + Clone,
+{
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            state: None,
+            initial_state: None,
+            events: HashMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn initial_state(mut self, initial_state: &State) -> Self {
+        self.initial_state = Some(initial_state.clone());
+        self.state = Some(RwLock::new(initial_state.clone()));
+        self
+    }
+
+    #[must_use]
+    pub fn add_event(
+        mut self,
+        old_state: State,
+        event: Event,
+        new_state: State,
+        action: Option<F>,
+    ) -> Self
+    where
+        F: Fn() -> Result<()> + Clone,
+    {
+        let state_events = self.events.entry(old_state).or_insert_with(HashMap::new);
+        let t = Transition {
+            trigger: event.clone(),
+            new_state,
+            action,
+        };
+        state_events.insert(event, t);
+        self
+    }
+
+    #[must_use]
+    pub fn build(self) -> StateMachine<F>
+    where
+        F: Fn() -> Result<()> + Clone,
+    {
+        let name = self.name;
+        let state = self.state.unwrap();
+        let initial_state = self.initial_state.unwrap();
+        StateMachine {
+            name,
+            state,
+            initial_state,
+            events: self.events,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,8 +233,10 @@ mod tests {
     fn test_one_state() -> Result<()> {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
-        let mut machine: StateMachine<fn() -> Result<()>> = StateMachine::new("test", &initial);
-        machine.add_event(initial.clone(), e1.clone(), initial.clone(), None);
+        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(initial.clone(), e1.clone(), initial.clone(), None)
+            .build();
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "initial");
@@ -198,8 +255,10 @@ mod tests {
             action_called.store(true, Ordering::SeqCst);
             Ok(())
         };
-        let mut machine = StateMachine::new("test", &initial);
-        machine.add_event(initial.clone(), e1.clone(), second.clone(), Some(action));
+        let machine = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
+            .build();
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -225,20 +284,17 @@ mod tests {
         let e1 = Event::new("e1");
         let e2 = Event::new("e2");
         let second = State::new("second");
-        let mut machine: StateMachine<fn() -> Result<()>> = StateMachine::new("test", &initial);
-        machine.add_event(initial.clone(), e1.clone(), second.clone(), None);
-        machine.add_event(second.clone(), e2.clone(), initial.clone(), None);
+        let machine: StateMachine<fn() -> Result<()>> = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(initial.clone(), e1.clone(), second.clone(), None)
+            .add_event(second.clone(), e2.clone(), initial.clone(), None)
+            .build();
 
-        machine.event(&e1)?;
-        assert_eq!(machine.current_state().name, "second");
-        // in `second` state, there are no transitions
-        assert!(machine.event(&e1).is_err());
-        machine.reset();
-
-        // check if we can call the action again
         assert_eq!(machine.current_state().name, "initial");
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
+        machine.event(&e2)?;
+        assert_eq!(machine.current_state().name, "initial");
         Ok(())
     }
 
@@ -254,8 +310,10 @@ mod tests {
             action_called.store(true, Ordering::SeqCst);
             Err(anyhow::anyhow!("action failed"))
         };
-        let mut machine = StateMachine::new("test", &initial);
-        machine.add_event(initial.clone(), e1.clone(), second.clone(), Some(action));
+        let machine = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
+            .build();
 
         let result = machine.event(&e1);
         assert_eq!(machine.current_state().name, "second");
@@ -274,13 +332,15 @@ mod tests {
         let initial = State::new("initial");
         let e1 = Event::new("e1");
         let second = State::new("second");
-        let mut machine = StateMachine::new("test", &initial);
-        machine.add_event(
-            initial.clone(),
-            e1.clone(),
-            second.clone(),
-            Some(regular_function),
-        );
+        let machine = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(
+                initial.clone(),
+                e1.clone(),
+                second.clone(),
+                Some(regular_function),
+            )
+            .build();
 
         machine.event(&e1)?;
         assert_eq!(machine.current_state().name, "second");
@@ -301,8 +361,10 @@ mod tests {
         let action = || {
             panic!("action failed");
         };
-        let mut machine = StateMachine::new("test", &initial);
-        machine.add_event(initial.clone(), e1.clone(), second.clone(), Some(action));
+        let machine = StateMachineBuilder::new("test")
+            .initial_state(&initial)
+            .add_event(initial.clone(), e1.clone(), second.clone(), Some(action))
+            .build();
 
         machine.event(&e1).unwrap();
     }
