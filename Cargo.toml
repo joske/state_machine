@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 tracing = "0.1.37"
 anyhow = "1.0.75"
+derive_more = "0.99.17"
 
 [dev-dependencies]
 tracing-test = "0.2.4"

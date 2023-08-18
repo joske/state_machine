@@ -1,12 +1,12 @@
 use anyhow::Result;
-use std::fmt::Formatter;
+use derive_more::Display;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::RwLock;
-use std::{collections::HashMap, fmt::Display};
 use tracing::{debug, error};
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
 pub struct State {
     name: String,
 }
@@ -22,13 +22,7 @@ impl State {
     }
 }
 
-impl Display for State {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "'{}'", self.name)
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Display)]
 pub struct Event {
     name: String,
 }
@@ -41,12 +35,6 @@ impl Event {
     /// The new event
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
-    }
-}
-
-impl Display for Event {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "'{}'", self.name)
     }
 }
 
@@ -83,7 +71,7 @@ where
     /// or if the action fails
     /// or if the lock is poisoned
     pub fn event(&self, event: &Event) -> Result<()> {
-        debug!("handling event: {:?}", event);
+        debug!("handling event: {event}");
         let mut state = self
             .state
             .write()
@@ -93,12 +81,7 @@ where
             let transition = state_events.get(event).cloned();
             if let Some(transition) = transition {
                 let new_state = transition.new_state.clone();
-                debug!(
-                    "{}: {:?} -> {:?}",
-                    self.name,
-                    state.name,
-                    new_state.clone().name,
-                );
+                debug!("{}: {} -> {}", self.name, state, new_state.clone(),);
                 *state = new_state;
                 if let Some(action) = transition.action {
                     return action();
